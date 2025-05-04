@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  goal-breakdown-ai:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .env:/app/.env
+    restart: unless-stopped
+    environment:
+      - FLASK_APP=backend/app.py
+      - FLASK_ENV=production
+    networks:
+      - goal-breakdown-network
+
+networks:
+  goal-breakdown-network:
+    driver: bridge
