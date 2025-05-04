@@ -4,7 +4,7 @@ import re
 from config import anthropic_api_key
 # Initialize Claude client
 
-client = anthropic.Anthropic(api_key= anthropic_api_key)  # Replace with your key
+client = anthropic.Anthropic(api_key=anthropic_api_key)  # Replace with your key
 
 user_prompt = """
 Please break down the following goal into multiple milestones. Each milestone should include:

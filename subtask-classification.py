@@ -5,6 +5,7 @@ from config import anthropic_api_key
 # Initialize Claude client
 client = anthropic.Anthropic(api_key=anthropic_api_key)
 
+
 def classify_tasks_with_claude(descriptions, client):
     # Construct classification prompt
     prompt = f"""
