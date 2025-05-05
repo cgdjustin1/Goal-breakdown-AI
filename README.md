@@ -115,12 +115,11 @@ with contributions from amazing open-source tools:
 
 ## 👥 About Us
 
-Yanglanduo(Elena) Deng  USC@CS master
-Guanda(Justin) Chen USC@DS master
-Johnson Chang USC@DS master
+- Yanglanduo(Elena) Deng  USC@CS master
+- Guanda(Justin) Chen USC@DS master
+- Johnson Chang USC@DS master
 
-We are a team participating in the AI development hackathon, dedicated to applying artificial intelligence technology to enhance daily productivity tools. GoalFlow AI is our minimum viable product (MVP) developed in just two days, and we look forward to continuing to improve this project in the future.
-
+- We are a team participating in the AI development hackathon, dedicated to applying artificial intelligence technology to enhance daily productivity tools. GoalFlow AI is our minimum viable product (MVP) developed in just two days, and we look forward to continuing to improve this project in the future.
 ---
 
 🌟 If you like this project, please give us a Star ⭐️
