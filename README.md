@@ -18,8 +18,8 @@
 - 📆 **Weekly Calendar View**  
   Visualize your tasks on a draggable weekly planner. You can assign tasks to specific days by dragging them from the to-do list.
 
-- ✅ **Smart Task Filtering**  
-  Easily switch between viewing all, active, or completed tasks. Mark tasks as done with a single click (✅ toggle).
+- 🔍 **Smart Task Filtering**  
+  Easily toggle between All / Active / Done tasks in the right panel to stay focused and organized.
 
 - ✏️ **Task Detail Editor**  
   Click on any task to view and edit its details, including title, date, time, and description in a clean popup.
