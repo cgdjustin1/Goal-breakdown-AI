@@ -1,0 +1,179 @@
+<!-- index.html - GoalFlow AI All-in-One HTML with Vue3 + Tailwind + Calendar Drag & Drop -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GoalFlow AI</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="app" class="flex h-screen">
+    <!-- Left: Chat -->
+    <div class="w-1/4 bg-white border-r p-4 flex flex-col">
+      <h2 class="font-bold text-lg flex items-center mb-2">
+        <i data-lucide="message-square" class="w-4 h-4 mr-2"></i> AI Assistant
+      </h2>
+      <div class="flex-1 overflow-y-auto space-y-2">
+        <div v-for="(msg, i) in chatMessages" :key="i" :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+          <div class="inline-block px-3 py-2 rounded bg-gray-100 text-sm whitespace-pre-line">{{ msg.content }}</div>
+        </div>
+      </div>
+      <div class="mt-2 flex">
+        <input v-model="inputMessage" @keyup.enter="sendMessage" placeholder="Type a message..." class="flex-1 border p-2 rounded-l text-sm" />
+        <button @click="sendMessage" class="bg-gray-800 text-white px-3 rounded-r">Send</button>
+      </div>
+    </div>
+
+    <!-- Center: Week Calendar -->
+    <div class="w-1/2 bg-white border-r flex flex-col">
+      <div class="p-4 flex justify-between items-center border-b">
+        <button @click="prevWeek" class="text-sm text-gray-600 hover:text-black">◀ Previous</button>
+        <div class="text-sm font-bold">{{ formatDate(weekDays[0]) }} - {{ formatDate(weekDays[6]) }}</div>
+        <button @click="nextWeek" class="text-sm text-gray-600 hover:text-black">Next ▶</button>
+      </div>
+      <div class="grid grid-cols-7 gap-px bg-gray-200 h-full text-sm">
+        <div v-for="(date, i) in weekDays" :key="i" class="flex flex-col p-2 bg-white" @dragover.prevent @drop="handleDrop(date)">
+          <div class="font-semibold text-center text-xs">{{ dayNames[i] }}</div>
+          <div class="text-center text-xs text-gray-500">{{ formatDate(date) }}</div>
+          <div class="mt-2 flex-1 space-y-1 overflow-auto">
+            <div
+              v-for="task in getTasksByDate(date)"
+              :key="task.id"
+              class="p-1 bg-gray-100 rounded border text-xs cursor-default"
+            >
+              {{ task.title }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Task List -->
+    <div class="w-1/4 bg-white p-4 flex flex-col">
+      <h2 class="font-bold text-lg flex items-center mb-2">
+        <i data-lucide="check-square" class="w-4 h-4 mr-2"></i> Tasks
+      </h2>
+      <div class="flex-1 overflow-y-auto space-y-2">
+        <div v-for="task in unscheduledTasks" :key="task.id" draggable="true"
+             @dragstart="draggedTask = task"
+             class="flex justify-between items-center bg-gray-100 px-3 py-2 rounded text-sm">
+          <span>{{ task.title }}</span>
+          <i data-lucide="trash-2" class="w-4 h-4 text-gray-500 hover:text-red-600 cursor-pointer" @click="deleteTask(task.id)"></i>
+        </div>
+      </div>
+      <div class="mt-2 flex">
+        <input v-model="newTaskInput" @keyup.enter="addTask" placeholder="New task..." class="flex-1 border p-2 rounded-l text-sm" />
+        <button @click="addTask" class="bg-gray-800 text-white px-3 rounded-r">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed } = Vue
+
+    createApp({
+      setup() {
+        const tasks = ref([]);
+        const draggedTask = ref(null);
+        const newTaskInput = ref('');
+        const inputMessage = ref('');
+        const chatMessages = ref([
+          { role: 'assistant', content: "Hello! I'm your AI assistant. What do you want to accomplish?" }
+        ]);
+
+        const today = new Date();
+        const currentDate = ref(new Date(today));
+
+        const getWeekDays = (date) => {
+          const d = new Date(date);
+          const day = d.getDay();
+          const monday = new Date(d.setDate(d.getDate() - ((day + 6) % 7)));
+          return [...Array(7)].map((_, i) => {
+            const newDate = new Date(monday);
+            newDate.setDate(monday.getDate() + i);
+            return newDate;
+          });
+        };
+
+        const formatDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const weekDays = computed(() => getWeekDays(currentDate.value));
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+        const getTasksByDate = (date) =>
+          tasks.value.filter(task => task.date && new Date(task.date).toDateString() === date.toDateString());
+
+        const unscheduledTasks = computed(() => tasks.value.filter(t => !t.date));
+
+        function addTask() {
+          if (!newTaskInput.value.trim()) return;
+          tasks.value.push({ id: Date.now(), title: newTaskInput.value.trim(), date: null });
+          newTaskInput.value = '';
+        }
+
+        function deleteTask(id) {
+          tasks.value = tasks.value.filter(t => t.id !== id);
+        }
+
+        function sendMessage() {
+          if (!inputMessage.value.trim()) return;
+          chatMessages.value.push({ role: 'user', content: inputMessage.value });
+          inputMessage.value = '';
+          setTimeout(() => {
+            chatMessages.value.push({ role: 'assistant', content: "Sure! Let's break it into steps:\n1. Plan\n2. Execute\n3. Review" });
+            tasks.value.push(
+              { id: Date.now() + 1, title: 'Plan', date: null },
+              { id: Date.now() + 2, title: 'Execute', date: null },
+              { id: Date.now() + 3, title: 'Review', date: null },
+            );
+            lucide.createIcons();
+          }, 800);
+        }
+
+        const handleDrop = (date) => () => {
+          if (draggedTask.value) {
+            draggedTask.value.date = new Date(date);
+            draggedTask.value = null;
+          }
+        };
+
+        const prevWeek = () => {
+          currentDate.value.setDate(currentDate.value.getDate() - 7);
+          currentDate.value = new Date(currentDate.value);
+        };
+
+        const nextWeek = () => {
+          currentDate.value.setDate(currentDate.value.getDate() + 7);
+          currentDate.value = new Date(currentDate.value);
+        };
+
+        return {
+          tasks,
+          draggedTask,
+          chatMessages,
+          inputMessage,
+          newTaskInput,
+          weekDays,
+          formatDate,
+          getTasksByDate,
+          unscheduledTasks,
+          addTask,
+          deleteTask,
+          sendMessage,
+          handleDrop,
+          prevWeek,
+          nextWeek,
+          dayNames,
+        }
+      },
+      mounted() {
+        lucide.createIcons();
+      },
+      updated() {
+        lucide.createIcons();
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
