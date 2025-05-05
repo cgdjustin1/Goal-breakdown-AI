@@ -83,8 +83,8 @@ Goal-breakdown-AI/
 |----------------------|-------------------------------------------------------------------------|
 | Add Task             | Use the input bar or AI chat assistant                                  |
 | Drag & Drop          | Move tasks from the list to a calendar day                              |
-| Mark as Done         | Click the ✅ icon to toggle completion                                   |
-| View/Edit Task       | Click on a task to open the edit popup                                  |
+| Mark as Done         | Click the ✅ icon to toggle completion                                  |
+| View/Edit Task       | Click on a task to view details or edit                                 |
 | AI Task Breakdown    | Chat with the Claude assistant to break down big goals into subtasks    |
 | AI Task Suggestions  | Claude helps populate the to-do list with actionable subtasks           |
 
