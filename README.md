@@ -10,7 +10,7 @@
 ### 🌟 Key Features
 
 - 🧠 **AI Task Breakdown Assistant (Claude-powered)**  
-  Describe your goal in natural language, and the AI assistant powered by **Anthropic Claude** will **automatically break it down** into smaller, executable steps.  
+  Describe your goal in natural language, and the AI assistant powered by **Anthropic Claude** will **automatically break it down** into smaller, executable steps. Then, automatically adds them to your to-do list.
   For example:  
   _"Plan my final paper for next week"_ →  
   _Claude suggests: “Research topic,” “Draft outline,” “Write first draft,” etc._
