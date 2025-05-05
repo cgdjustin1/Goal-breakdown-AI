@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoalFlow AI</title>
+
+  <!-- 依赖 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 样式（完全保留你原来的） -->
+  <style>
+    .task-enter-active,.task-leave-active{transition:all .3s ease}
+    .task-enter-from,.task-leave-to{opacity:0;transform:translateY(10px)}
+    .drag-over{background:rgba(59,130,246,.1);border:2px dashed #3b82f6}
+    .resizer{cursor:col-resize;width:8px;background:rgba(229,231,235,.7);z-index:10}
+    .resizer:hover,.resizer.active{background:rgba(59,130,246,.5)}
+    .resizing{user-select:none}
+  </style>
+</head>
+<body class="bg-gray-50">
+<!-- ================== 根容器 ================== -->
+<div id="app" class="flex flex-col md:flex-row h-screen relative">
+  <!-- ===== Resizer Indicator ===== -->
+  <div v-if="showResizeIndicator" class="fixed inset-0 pointer-events-none z-50">
+    <div class="bg-blue-500 opacity-20 h-full" :style="{ width:`${resizeIndicatorWidth}%` }"></div>
+  </div>
+
+  <!-- ===== 任务详情弹窗 ===== -->
+  <div v-if="selectedTask" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+       @click.self="closeTaskDetail">
+    <div class="bg-white shadow-xl rounded-xl p-6 w-full max-w-md mx-4">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg">Task Details</h3>
+        <button @click="closeTaskDetail" class="text-gray-500 hover:text-gray-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+        <input v-model="selectedTask.title" class="w-full border rounded p-2 text-sm"/>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+        <input type="date" v-model="selectedTask.dateFormatted" class="w-full border rounded p-2 text-sm"/>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Time</label>
+        <input type="time" v-model="selectedTask.timeFormatted" class="w-full border rounded p-2 text-sm"/>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+        <textarea v-model="selectedTask.description" class="w-full border rounded p-2 text-sm h-24"></textarea>
+      </div>
+
+      <div class="flex justify-end space-x-2">
+        <button @click="closeTaskDetail" class="px-4 py-2 border rounded text-sm hover:bg-gray-100">Cancel</button>
+        <button @click="saveTaskDetail" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 左侧：Chat ===== -->
+  <div class="w-full md:w-1/4 h-1/3 md:h-full bg-white border-r p-4 flex flex-col"
+       :style="{ width:`${leftPanelWidth}%` }">
+    <h2 class="font-bold text-lg flex items-center mb-2">
+      <i data-lucide="message-square" class="w-4 h-4 mr-2"></i> AI Assistant
+    </h2>
+
+    <div class="flex-1 overflow-y-auto space-y-2 pr-2">
+      <div v-for="(msg,i) in chatMessages" :key="i"
+           :class="msg.role==='user' ? 'text-right':'text-left'">
+        <div :class="['inline-block px-3 py-2 rounded text-sm whitespace-pre-line',
+                      msg.role==='user'?'bg-blue-100':'bg-gray-100']">
+          {{ msg.content }}
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-2 flex">
+      <input v-model="inputMessage" @keyup.enter="sendMessage"
+             placeholder="Type a message..."
+             class="flex-1 border p-2 rounded-l text-sm"/>
+      <button @click="sendMessage"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-r flex items-center">
+        <i data-lucide="send" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- 左侧分隔条 -->
+  <div class="resizer h-full hidden md:block"
+       :class="{active:isLeftResizing}" @mousedown="startLeftResize"></div>
+
+  <!-- ===== 中间：Week Calendar ===== -->
+  <div class="w-full md:w-1/2 h-1/3 md:h-full bg-white border-r flex flex-col"
+       :style="{ width:`${centerPanelWidth}%` }">
+    <div class="p-4 flex justify-between items-center border-b">
+      <button @click="prevWeek"
+              class="text-sm text-gray-600 hover:text-black p-1 rounded hover:bg-gray-100">
+        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+      </button>
+      <div class="text-sm font-bold">{{ formatDate(weekDays[0]) }} - {{ formatDate(weekDays[6]) }}</div>
+      <button @click="nextWeek"
+              class="text-sm text-gray-600 hover:text-black p-1 rounded hover:bg-gray-100">
+        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-7 gap-px bg-gray-200 h-full text-sm">
+      <div v-for="(date,i) in weekDays" :key="i"
+           class="flex flex-col p-2 bg-white"
+           :class="{ 'drag-over': isDragOver===i }"
+           @dragover.prevent="isDragOver=i"
+           @dragleave="isDragOver=null"
+           @drop="handleDrop($event,date); isDragOver=null">
+
+        <div class="font-semibold text-center text-xs">{{ dayNames[i] }}</div>
+        <div class="text-center text-xs text-gray-500">{{ formatDate(date) }}</div>
+
+        <div class="mt-2 flex-1 space-y-1 overflow-auto">
+          <transition-group name="task">
+            <div v-for="task in getTasksByDate(date)" :key="task.id"
+                 class="flex items-center space-x-2 p-1 rounded border border-gray-200 bg-gray-100 text-xs cursor-pointer"
+                 draggable="true" @dragstart="startDrag($event,task)">
+              <span @click="toggleTask(task)"
+                    class="flex items-center justify-center w-4 h-4 cursor-pointer">
+                <span v-if="task.done"
+                      class="flex items-center justify-center w-4 h-4 bg-green-500 text-white rounded">✓</span>
+                <span v-else class="flex items-center justify-center w-4 h-4 border border-gray-300 rounded"></span>
+              </span>
+              <span @click="openTaskDetail(task)" :class="task.done?'text-green-600':'text-black'" class="truncate flex-1">
+                {{ task.title }}
+              </span>
+              <span v-if="task.timeFormatted" class="text-gray-500 text-xs">{{ task.timeFormatted }}</span>
+            </div>
+          </transition-group>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 中间分隔条 -->
+  <div class="resizer h-full hidden md:block"
+       :class="{active:isRightResizing}" @mousedown="startRightResize"></div>
+
+  <!-- ===== 右侧：Task List ===== -->
+  <div class="w-full md:w-1/4 h-1/3 md:h-full bg-white p-4 flex flex-col"
+       :style="{ width:`${rightPanelWidth}%` }"
+       :class="{ 'drag-over': isDragOverList }"
+       @dragover.prevent="isDragOverList=true"
+       @dragleave="isDragOverList=false"
+       @drop="handleReturnToList($event); isDragOverList=false">
+
+    <h2 class="font-bold text-lg flex items-center mb-2">
+      <i data-lucide="check-square" class="w-4 h-4 mr-2"></i> Tasks
+    </h2>
+
+    <div class="flex mb-2">
+      <button v-for="filter in ['All','Active','Done']" :key="filter"
+              @click="activeFilter=filter.toLowerCase()"
+              :class="['px-2 py-1 text-xs mr-1 rounded',
+                       activeFilter===filter.toLowerCase()
+                         ? 'bg-blue-600 text-white'
+                         : 'bg-gray-200 hover:bg-gray-300']">
+        {{ filter }}
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto space-y-2">
+      <transition-group name="task" tag="div" class="space-y-2">
+        <div v-for="task in filteredUnscheduledTasks" :key="task.id" draggable="true"
+             @dragstart="startDrag($event,task)"
+             class="flex flex-col bg-gray-100 px-3 py-2 rounded text-sm border border-gray-200">
+
+          <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+              <span @click="toggleTask(task)"
+                    class="flex items-center justify-center w-4 h-4 cursor-pointer">
+                <span v-if="task.done"
+                      class="flex items-center justify-center w-4 h-4 bg-green-500 text-white rounded">✓</span>
+                <span v-else class="flex items-center justify-center w-4 h-4 border border-gray-300 rounded"></span>
+              </span>
+              <span @click="openTaskDetail(task)" :class="task.done?'text-green-600':'text-black'" class="truncate">
+                {{ task.title }}
+              </span>
+            </div>
+            <i data-lucide="trash-2"
+               class="w-4 h-4 text-gray-500 hover:text-red-600 cursor-pointer ml-2"
+               @click.stop="deleteTask(task.id)"></i>
+          </div>
+
+          <!-- 找资源按钮 -->
+          <button v-if="task.need_resource && !task.recommendations"
+                  @click="fetchResources(task)"
+                  class="mt-1 text-xs text-blue-600 underline w-fit">📚 Find Resources</button>
+
+          <!-- 推荐摘要 -->
+          <div v-if="task.recommendations"
+               class="mt-1 text-xs text-gray-600 whitespace-pre-line border-t pt-1">
+            {{ task.recommendations }}
+          </div>
+        </div>
+      </transition-group>
+    </div>
+
+    <div class="mt-2 flex">
+      <input v-model="newTaskInput" @keyup.enter="addTask"
+             placeholder="New task..." class="flex-1 border p-2 rounded-l text-sm"/>
+      <button @click="addTask"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-r">Add</button>
+    </div>
+  </div>
+</div> <!-- #app end -->
+
+<!-- ================= Vue 逻辑 ================= -->
+<script>
+const { createApp, ref, computed, watch } = Vue;
+const API_ROOT = "http://localhost:5100";   // 后端根地址
+
+createApp({
+  setup() {
+    /* ---------- 状态 ---------- */
+    const tasks           = ref(JSON.parse(localStorage.getItem('goalflow-tasks')||'[]'));
+    const draggedTask     = ref(null);
+    const selectedTask    = ref(null);
+    const newTaskInput    = ref('');
+    const inputMessage    = ref('');
+    const chatMessages    = ref([{role:'assistant',content:"Hello! I'm your AI assistant. What do you want to accomplish today?"}]);
+
+    const isDragOver      = ref(null);
+    const isDragOverList  = ref(false);
+    const activeFilter    = ref('all');
+
+    // 日历
+    const today           = new Date();
+    const currentDate     = ref(new Date(today));
+
+    // 面板宽度
+    const leftPanelWidth  = ref(25);
+    const centerPanelWidth= ref(50);
+    const rightPanelWidth = ref(25);
+    const isLeftResizing  = ref(false);
+    const isRightResizing = ref(false);
+    const resizeStartX    = ref(0);
+    const initialLeftWidth= ref(0);
+    const initialCenterWidth=ref(0);
+    const initialRightWidth= ref(0);
+    const showResizeIndicator=ref(false);
+    const resizeIndicatorWidth=ref(0);
+
+    /* ---------- 本地持久化 ---------- */
+    watch(tasks, t=>localStorage.setItem('goalflow-tasks',JSON.stringify(t)), {deep:true});
+
+    /* ---------- 日历工具 ---------- */
+    const getWeekDays = date=>{
+      const d = new Date(date);
+      const diff = (d.getDay()===0?6:d.getDay()-1);
+      const monday = new Date(d); monday.setDate(d.getDate()-diff);
+      return [...Array(7)].map((_,i)=>new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+i));
+    };
+    const formatDate = d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const weekDays   = computed(()=>getWeekDays(currentDate.value));
+    const dayNames   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    const getTasksByDate = date=>tasks.value.filter(t=>t.date && new Date(t.date).toDateString()===date.toDateString());
+    const unscheduledTasks = computed(()=>tasks.value.filter(t=>!t.date));
+    const filteredUnscheduledTasks = computed(()=>{
+      if(activeFilter.value==='all')   return unscheduledTasks.value;
+      if(activeFilter.value==='active')return unscheduledTasks.value.filter(t=>!t.done);
+      if(activeFilter.value==='done')  return unscheduledTasks.value.filter(t=>t.done);
+    });
+
+    /* ---------- 调用后端：拆解 ---------- */
+    async function sendMessage(){
+      if(!inputMessage.value.trim()) return;
+      const goal = inputMessage.value.trim();
+      chatMessages.value.push({role:'user',content:goal});
+      inputMessage.value='';
+
+      const typing = {role:'assistant',content:'...',isTyping:true};
+      chatMessages.value.push(typing);
+
+      try{
+        const resp = await fetch(`${API_ROOT}/api/task-breakdown`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({goal})
+        });
+        if(!resp.ok) throw new Error(await resp.text());
+        const subtasks = await resp.json();
+
+        chatMessages.value.pop(); // remove typing
+        chatMessages.value.push({
+          role:'assistant',
+          content:`Here is the breakdown:\n\n${subtasks.map(s=>'• '+s.description).join('\n')}`
+        });
+
+        subtasks.forEach(t=>{
+          tasks.value.push({
+            id:Date.now()+Math.random(),
+            title:t.description,
+            date:null,
+            done:false,
+            need_resource:!!t.need_resource,
+            tags:t.resource_tags||[],
+            milestone:t.milestone||'',
+            recommendations:null,
+            timeFormatted:null,
+            dateFormatted:null,
+            description:''
+          })
+        });
+      }catch(e){
+        console.error(e);
+        chatMessages.value.pop();
+        chatMessages.value.push({role:'assistant',content:'Oops, something went wrong. Try again later.'});
+      }
+    }
+
+    /* ---------- 调用后端：资源推荐 ---------- */
+    async function fetchResources(task){
+      try{
+        task.recommendations='Loading...';
+        const resp = await fetch(`${API_ROOT}/api/task-resource`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({description:task.title, resource_tags:task.tags})
+        });
+        if(!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        task.recommendations = data.summary;
+      }catch(e){
+        console.error(e);
+        task.recommendations='Failed to fetch resources.';
+      }
+    }
+
+    /* ---------- 其他原有功能（新增/删除/拖拽/完成/弹窗等） ---------- */
+    function addTask(){
+      if(!newTaskInput.value.trim()) return;
+      tasks.value.push({
+        id:Date.now(), title:newTaskInput.value.trim(), date:null,
+        timeFormatted:null, dateFormatted:null, description:'',
+        done:false, need_resource:false, tags:[], recommendations:null
+      });
+      newTaskInput.value='';
+    }
+    function deleteTask(id){ tasks.value = tasks.value.filter(t=>t.id!==id); }
+    function toggleTask(task){ task.done=!task.done; }
+    function openTaskDetail(task){
+      task.dateFormatted = task.date ? new Date(task.date).toISOString().split('T')[0] : '';
+      selectedTask.value = task;
+    }
+    function closeTaskDetail(){ selectedTask.value=null; }
+    function saveTaskDetail(){
+      if(!selectedTask.value) return;
+      if(selectedTask.value.dateFormatted){
+        const d=new Date(selectedTask.value.dateFormatted);
+        if(selectedTask.value.timeFormatted){
+          const [h,m]=selectedTask.value.timeFormatted.split(':');
+          d.setHours(+h,+m);
+        }
+        selectedTask.value.date=d;
+      }else selectedTask.value.date=null;
+      selectedTask.value=null;
+    }
+
+    /* ---------- 拖拽 ---------- */
+    function startDrag(e,task){ draggedTask.value=task; e.dataTransfer.effectAllowed='move'; }
+    function handleDrop(e,date){ if(draggedTask.value){ draggedTask.value.date=date; draggedTask.value=null;} }
+    function handleReturnToList(){ if(draggedTask.value){ draggedTask.value.date=null; draggedTask.value=null;} }
+
+    /* ---------- 周切换 ---------- */
+    const prevWeek = ()=>{const d=new Date(currentDate.value); d.setDate(d.getDate()-7); currentDate.value=d;}
+    const nextWeek = ()=>{const d=new Date(currentDate.value); d.setDate(d.getDate()+7); currentDate.value=d;}
+
+    /* ---------- 面板缩放（保留原逻辑） ---------- */
+    function startLeftResize(e){
+      isLeftResizing.value=true; resizeStartX.value=e.clientX;
+      initialLeftWidth.value=leftPanelWidth.value;
+      initialCenterWidth.value=centerPanelWidth.value;
+      document.addEventListener('mousemove',handleLeftResize);
+      document.addEventListener('mouseup',stopLeftResize);
+      document.body.classList.add('resizing');
+      showResizeIndicator.value=true; resizeIndicatorWidth.value=leftPanelWidth.value;
+    }
+    function handleLeftResize(e){
+      if(!isLeftResizing.value) return;
+      const deltaX=e.clientX-resizeStartX.value;
+      const contW=document.getElementById('app').offsetWidth;
+      const deltaPct=deltaX/contW*100;
+      const newLeft=Math.max(10,Math.min(45,initialLeftWidth.value+deltaPct));
+      const change=newLeft-leftPanelWidth.value;
+      leftPanelWidth.value=newLeft;
+      centerPanelWidth.value=initialCenterWidth.value-change;
+      resizeIndicatorWidth.value=newLeft;
+    }
+    function stopLeftResize(){
+      isLeftResizing.value=false;
+      document.removeEventListener('mousemove',handleLeftResize);
+      document.removeEventListener('mouseup',stopLeftResize);
+      document.body.classList.remove('resizing'); showResizeIndicator.value=false;
+    }
+
+    function startRightResize(e){
+      isRightResizing.value=true; resizeStartX.value=e.clientX;
+      initialCenterWidth.value=centerPanelWidth.value;
+      initialRightWidth.value=rightPanelWidth.value;
+      document.addEventListener('mousemove',handleRightResize);
+      document.addEventListener('mouseup',stopRightResize);
+      document.body.classList.add('resizing');
+      showResizeIndicator.value=true; resizeIndicatorWidth.value=leftPanelWidth.value+centerPanelWidth.value;
+    }
+    function handleRightResize(e){
+      if(!isRightResizing.value) return;
+      const deltaX=e.clientX-resizeStartX.value;
+      const contW=document.getElementById('app').offsetWidth;
+      const deltaPct=deltaX/contW*100;
+      const newCenter=Math.max(30,Math.min(70,initialCenterWidth.value+deltaPct));
+      const change=newCenter-centerPanelWidth.value;
+      centerPanelWidth.value=newCenter;
+      rightPanelWidth.value=initialRightWidth.value-change;
+      resizeIndicatorWidth.value=leftPanelWidth.value+newCenter;
+    }
+    function stopRightResize(){
+      isRightResizing.value=false;
+      document.removeEventListener('mousemove',handleRightResize);
+      document.removeEventListener('mouseup',stopRightResize);
+      document.body.classList.remove('resizing'); showResizeIndicator.value=false;
+    }
+
+    /* ---------- 暴露给模板 ---------- */
+    return {
+      /* 状态 */
+      tasks, draggedTask, selectedTask, newTaskInput, inputMessage,
+      chatMessages, isDragOver, isDragOverList, activeFilter,
+      weekDays, dayNames, leftPanelWidth, centerPanelWidth, rightPanelWidth,
+      isLeftResizing, isRightResizing, showResizeIndicator, resizeIndicatorWidth,
+      /* 计算 / 工具 */
+      formatDate, getTasksByDate, filteredUnscheduledTasks,
+      /* 方法 */
+      sendMessage, fetchResources,
+      addTask, deleteTask, toggleTask,
+      openTaskDetail, closeTaskDetail, saveTaskDetail,
+      startDrag, handleDrop, handleReturnToList,
+      prevWeek, nextWeek,
+      startLeftResize, startRightResize
+    };
+  },
+  mounted(){ lucide.createIcons(); },
+  updated(){ lucide.createIcons(); }
+}).mount('#app');
+</script>
+</body>
+</html>

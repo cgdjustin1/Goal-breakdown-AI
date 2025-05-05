@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GoalFlow AI</title>
+
+  <!-- Vue 3 全量构建（含 compiler）-->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- 图标 -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="app" class="flex h-screen">
+    <!-- ============ Left: Chat ============ -->
+    <div class="w-1/4 bg-white border-r p-4 flex flex-col">
+      <h2 class="font-bold text-lg flex items-center mb-2">
+        <i data-lucide="message-square" class="w-4 h-4 mr-2"></i> AI Assistant
+      </h2>
+      <div class="flex-1 overflow-y-auto space-y-2">
+        <div v-for="(msg, i) in chatMessages" :key="i"
+             :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+          <div class="inline-block px-3 py-2 rounded bg-gray-100 text-sm whitespace-pre-line">
+            {{ msg.content }}
+          </div>
+        </div>
+      </div>
+      <div class="mt-2 flex">
+        <input v-model="inputMessage" @keyup.enter="sendMessage"
+               placeholder="Enter your goal..."
+               class="flex-1 border p-2 rounded-l text-sm" />
+        <button @click="sendMessage" class="bg-gray-800 text-white px-3 rounded-r">Send</button>
+      </div>
+    </div>
+
+    <!-- ============ Center: Calendar ============ -->
+    <div class="w-1/2 bg-white border-r flex flex-col">
+      <div class="p-4 flex justify-between items-center border-b">
+        <button @click="prevWeek" class="text-sm text-gray-600 hover:text-black">◀ Previous</button>
+        <div class="text-sm font-bold">
+          {{ formatDate(weekDays[0]) }} - {{ formatDate(weekDays[6]) }}
+        </div>
+        <button @click="nextWeek" class="text-sm text-gray-600 hover:text-black">Next ▶</button>
+      </div>
+
+      <div class="grid grid-cols-7 gap-px bg-gray-200 h-full text-sm">
+        <div v-for="(date, i) in weekDays" :key="i"
+             class="flex flex-col p-2 bg-white"
+             @dragover.prevent
+             @drop="handleDrop(date)">
+          <div class="font-semibold text-center text-xs">{{ dayNames[i] }}</div>
+          <div class="text-center text-xs text-gray-500">{{ formatDate(date) }}</div>
+
+          <div class="mt-2 flex-1 space-y-1 overflow-auto">
+            <div v-for="task in getTasksByDate(date)" :key="task.id"
+                 class="p-1 bg-gray-100 rounded border text-xs cursor-default">
+              {{ task.title }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Right: Tasks ============ -->
+    <div class="w-1/4 bg-white p-4 flex flex-col">
+      <h2 class="font-bold text-lg flex items-center mb-2">
+        <i data-lucide="check-square" class="w-4 h-4 mr-2"></i> Tasks
+      </h2>
+      <div class="flex-1 overflow-y-auto space-y-2">
+        <div v-for="task in unscheduledTasks" :key="task.id" draggable="true"
+             @dragstart="draggedTask = task"
+             class="flex flex-col bg-gray-100 px-3 py-2 rounded text-sm">
+          <div class="flex justify-between items-center">
+            <span>{{ task.title }}</span>
+            <i data-lucide="trash-2"
+               class="w-4 h-4 text-gray-500 hover:text-red-600 cursor-pointer"
+               @click="deleteTask(task.id)"></i>
+          </div>
+
+          <button v-if="task.need_resource && !task.recommendations"
+                  @click="fetchResources(task)"
+                  class="mt-1 text-xs text-blue-600 underline w-fit">
+            📚 Find Resources
+          </button>
+
+          <div v-if="task.recommendations"
+               class="mt-1 text-xs text-gray-600 whitespace-pre-line border-t pt-1">
+            {{ task.recommendations }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Vue App ============ -->
+  <script>
+    const { createApp, ref, computed } = Vue;
+    const API_ROOT = "http://localhost:5100";   // 统一管理后端地址
+
+    createApp({
+      setup() {
+        /* ---------- State ---------- */
+        const tasks         = ref([]);
+        const draggedTask   = ref(null);
+        const inputMessage  = ref('');
+        const chatMessages  = ref([
+          { role: 'assistant', content: "Hello! I'm your AI assistant. What do you want to accomplish?" }
+        ]);
+
+        /* ---------- Calendar Helpers ---------- */
+        const today       = new Date();
+        const currentDate = ref(today);
+
+        const getWeekDays = (date) => {
+          const d = new Date(date);
+          const day = d.getDay();
+          const monday = new Date(d.setDate(d.getDate() - ((day + 6) % 7)));
+          return [...Array(7)].map((_, i) =>
+            new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+        };
+
+        const formatDate = (d) =>
+          d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        const weekDays = computed(() => getWeekDays(currentDate.value));
+        const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+        const getTasksByDate = (date) =>
+          tasks.value.filter(t => t.date && new Date(t.date).toDateString() === date.toDateString());
+
+        const unscheduledTasks = computed(() => tasks.value.filter(t => !t.date));
+
+        /* ---------- API Calls ---------- */
+        async function sendMessage() {
+          if (!inputMessage.value.trim()) return;
+          const goal = inputMessage.value.trim();
+          chatMessages.value.push({ role: 'user', content: goal });
+          inputMessage.value = '';
+
+          try {
+            const res = await fetch(`${API_ROOT}/api/task-breakdown`, {
+              method : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body   : JSON.stringify({ goal })
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              throw new Error(`HTTP ${res.status} – ${txt}`);
+            }
+
+            const subtasks = await res.json();
+            chatMessages.value.push({
+              role   : 'assistant',
+              content: "Here is the breakdown:\n\n" +
+                       subtasks.map(s => `- ${s.description}`).join('\n')
+            });
+
+            subtasks.forEach(task => {
+              tasks.value.push({
+                id   : Date.now() + Math.random(),
+                title: task.description,
+                date : null,
+                need_resource : task.need_resource,
+                tags : task.resource_tags,
+                milestone: task.milestone,
+                recommendations: null
+              });
+            });
+          } catch (err) {
+            console.error(err);
+            chatMessages.value.push({
+              role: 'assistant',
+              content: 'Oops, something went wrong. Try again later.'
+            });
+          }
+        }
+
+        async function fetchResources(task) {
+          try {
+            const res = await fetch(`${API_ROOT}/api/task-resource`, {
+              method : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body   : JSON.stringify({
+                description   : task.title,
+                resource_tags : task.tags
+              })
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              throw new Error(`HTTP ${res.status} – ${txt}`);
+            }
+
+            const data  = await res.json();
+            task.recommendations = data.summary;
+          } catch (err) {
+            console.error(err);
+            task.recommendations = 'Failed to fetch resources.';
+          }
+        }
+
+        /* ---------- Misc Methods ---------- */
+        function deleteTask(id) {
+          tasks.value = tasks.value.filter(t => t.id !== id);
+        }
+
+        const prevWeek  = () => currentDate.value.setDate(currentDate.value.getDate() - 7);
+        const nextWeek  = () => currentDate.value.setDate(currentDate.value.getDate() + 7);
+
+        const handleDrop = (date) => () => {
+          if (draggedTask.value) {
+            draggedTask.value.date = new Date(date);
+            draggedTask.value = null;
+          }
+        };
+
+        /* ---------- Expose to template ---------- */
+        return {
+          // state
+          tasks, draggedTask, inputMessage, chatMessages,
+          // calendar
+          weekDays, dayNames, formatDate,
+          unscheduledTasks, getTasksByDate,
+          // methods
+          sendMessage, fetchResources, deleteTask,
+          handleDrop, prevWeek, nextWeek
+        };
+      },
+
+      mounted()  { lucide.createIcons(); },
+      updated()  { lucide.createIcons(); }
+    }).mount('#app');
+  </script>
+</body>
+</html>
