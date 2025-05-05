@@ -68,7 +68,10 @@ def task_breakdown():
 
     # Step 1: Claude breakdown
     user_prompt = f"""
-    Please break down the following goal into multiple milestones. Each milestone should include:
+    Please break down the following goal into multiple milestones.  at most 6 tasks total ❶
+    Please break down the following goal into **at most 6 tasks total** ❶
+    (If the goal logically needs more, merge or get those within 6 tasks。)    
+    Each milestone should include:
     - title: a concise description
     - week_range: an array like [start_week, end_week]
     - tasks: a list of tasks under the milestone, and each task should include:
