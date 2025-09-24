@@ -115,7 +115,7 @@ with contributions from amazing open-source tools:
 
 ## 👥 About Us
 
-- Yanglanduo(Elena) Deng  USC@CS master
+- Yanglanduo(Daisy) Deng  USC@CS master
 - Guanda(Justin) Chen USC@DS master
 - Johnson Chang USC@DS master
 
